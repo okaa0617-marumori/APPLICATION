@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国名クイズ</title>
+    <style>
+        /* --- デザイン --- */
+        body {
+            background-color: #FFDDC1; /* 薄いオレンジ */
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        #quiz-container {
+            background-color: rgba(255, 255, 255, 0.5);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 500px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #flag-container {
+            position: relative; /* 正解・不正解の表示を重ねるため */
+            margin-bottom: 20px;
+        }
+
+        #flag-image {
+            width: 80%;
+            max-width: 300px;
+            height: auto;
+            border: 2px solid #FFF;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            border-radius: 5px;
+        }
+
+        #result-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none; /* 初期状態では非表示 */
+            justify-content: center;
+            align-items: center;
+            font-size: 150px;
+            opacity: 0.8;
+        }
+        
+        #choices-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .choice-btn {
+            background-color: #FFFFFF; /* ボタンは白 */
+            border: 1px solid #CCC;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+
+        .choice-btn:hover {
+            background-color: #f0f0f0;
+            transform: translateY(-2px);
+        }
+
+        #answer-container {
+            display: none; /* 初期状態では非表示 */
+            margin-top: 20px;
+        }
+
+        #answer-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #D32F2F;
+        }
+
+        #capital-text {
+            font-size: 18px;
+            margin-top: 10px;
+            color: #555;
+        }
+
+        #next-button {
+            margin-top: 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #next-button:hover {
+            background-color: #45a049;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="quiz-container">
+        <h1>国名クイズ</h1>
+        
+        <div id="flag-container">
+            <img id="flag-image" src="" alt="国旗">
+            <div id="result-overlay"></div>
+        </div>
+
+        <div id="choices-container">
+            </div>
+
+        <div id="answer-container">
+            <p id="answer-text"></p>
+            <p id="capital-text"></p>
+            <button id="next-button">次の問題へ</button>
+        </div>
+    </div>
+
+    <script>
+    // --- JavaScriptによる機能実装 ---
+
+    // 1. クイズデータ (知名度が低めの国を多めに設定)
+    const quizData = [
+        { name: 'ブータン', capital: 'ティンプー', code: 'bt' },
+        { name: 'キリバス', capital: 'タラワ', code: 'ki' },
+        { name: 'コモロ', capital: 'モロニ', code: 'km' },
+        { name: 'ジブチ', capital: 'ジブチシティ', code: 'dj' },
+        { name: 'エスワティニ', capital: 'ムババーネ', code: 'sz' },
+        { name: 'ガイアナ', capital: 'ジョージタウン', code: 'gy' },
+        { name: 'レソト', capital: 'マセル', code: 'ls' },
+        { name: 'モルドバ', capital: 'キシナウ', code: 'md' },
+        { name: 'ナウル', capital: 'ヤレン（事実上）', code: 'nr' },
+        { name: 'パラオ', capital: 'ンゲルルムッド', code: 'pw' },
+        { name: 'サントメ・プリンシペ', capital: 'サントメ', code: 'st' },
+        { name: 'サンマリノ', capital: 'サンマリノ市', code: 'sm' },
+        { name: 'スリナム', capital: 'パラマリボ', code: 'sr' },
+        { name: '東ティモール', capital: 'ディリ', code: 'tl' },
+        { name: 'ツバル', capital: 'フナフティ', code: 'tv' },
+        { name: 'バヌアツ', capital: 'ポートビラ', code: 'vu' },
+        { name: 'ベラルーシ', capital: 'ミンスク', code: 'by' },
+        { name: 'リヒテンシュタイン', capital: 'ファドゥーツ', code: 'li' },
+        { name: 'モーリタニア', capital: 'ヌアクショット', code: 'mr'},
+        { name: 'セーシェル', capital: 'ヴィクトリア', code: 'sc'},
+    ];
+
+    // 2. HTML要素の取得
+    const flagImage = document.getElementById('flag-image');
+    const choicesContainer = document.getElementById('choices-container');
+    const answerContainer = document.getElementById('answer-container');
+    const resultOverlay = document.getElementById('result-overlay');
+    const answerText = document.getElementById('answer-text');
+    const capitalText = document.getElementById('capital-text');
+    const nextButton = document.getElementById('next-button');
+
+    let currentCorrectAnswer = null;
+    let answered = false; // 回答済みかどうかのフラグ
+
+    // 3. クイズをセットアップする関数
+    function setupQuiz() {
+        // 前回の結果をリセット
+        answered = false;
+        answerContainer.style.display = 'none';
+        resultOverlay.style.display = 'none';
+        choicesContainer.style.display = 'grid'; // 選択肢を再表示
+
+        // ランダムに正解の国を選ぶ
+        const correctCountryIndex = Math.floor(Math.random() * quizData.length);
+        currentCorrectAnswer = quizData[correctCountryIndex];
+
+        // 不正解の選択肢を3つ選ぶ（正解と重複しないように）
+        const incorrectChoices = [];
+        while (incorrectChoices.length < 3) {
+            const randomIndex = Math.floor(Math.random() * quizData.length);
+            const randomCountry = quizData[randomIndex];
+            if (randomCountry.name !== currentCorrectAnswer.name && !incorrectChoices.some(c => c.name === randomCountry.name)) {
+                incorrectChoices.push(randomCountry);
+            }
+        }
+        
+        // 選択肢（正解＋不正解）を配列にまとめ、シャッフルする
+        const choices = [currentCorrectAnswer, ...incorrectChoices];
+        choices.sort(() => Math.random() - 0.5);
+
+        // 国旗画像を設定
+        // flagcdn.comのサービスを利用して国コードから画像を取得
+        flagImage.src = `https://flagcdn.com/w320/${currentCorrectAnswer.code}.png`;
+        flagImage.alt = `国旗`;
+
+        // 選択肢ボタンを生成
+        choicesContainer.innerHTML = ''; // コンテナをクリア
+        choices.forEach(country => {
+            const button = document.createElement('button');
+            button.textContent = country.name;
+            button.className = 'choice-btn';
+            button.onclick = () => checkAnswer(country.name);
+            choicesContainer.appendChild(button);
+        });
+    }
+
+    // 4. 回答をチェックする関数
+    function checkAnswer(selectedName) {
+        if (answered) return; // 既に回答済みの場合は何もしない
+        answered = true;
+
+        // 選択肢を非表示にし、結果を表示するエリアを表示
+        choicesContainer.style.display = 'none';
+        answerContainer.style.display = 'block';
+        resultOverlay.style.display = 'flex';
+
+        // 正解・不正解の判定と表示
+        if (selectedName === currentCorrectAnswer.name) {
+            resultOverlay.textContent = '';
+            resultOverlay.style.color = 'red';
+        } else {
+            resultOverlay.textContent = '';
+            resultOverlay.style.color = 'blue';
+        }
+
+        // 正解の国名と首都を表示
+        answerText.textContent = `正解は 「${currentCorrectAnswer.name}」`;
+        capitalText.textContent = `(首都: ${currentCorrectAnswer.capital})`;
+    }
+
+    // 5. 「次の問題へ」ボタンのイベント
+    nextButton.addEventListener('click', setupQuiz);
+
+    // 6. 最初のクイズを読み込む
+    setupQuiz();
+
+    </script>
+</body>
+</html>
