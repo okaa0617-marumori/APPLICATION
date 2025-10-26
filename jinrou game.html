@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>シンプル人狼ゲーム（HTML + JS）</title>
+<style>
+  :root{
+    --bg: #2b0b3a; /* 暗い紫 */
+    --card-bg: #ffffff;
+    --muted: #6b6b6b;
+    --accent: #7b4bc3;
+    --tab-bg: #ffffff; /* タブは白 */
+  }
+  html,body { height:100%; margin:0; padding:0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background:var(--bg); color:#fff; display:flex; align-items:stretch; justify-content:center; padding:20px; box-sizing:border-box; }
+  .app { width:100%; max-width:900px; }
+
+  /* Card (white tabs) */
+  .card { background:var(--card-bg); border:1px solid rgba(0,0,0,0.06); padding:12px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.25); margin-bottom:12px; color:#111; }
+
+  label { display:block; margin-top:8px; color:#333; font-weight:600; }
+  input[type="text"], input[type="number"], select, .name-input { width:100%; padding:8px; margin-top:6px; box-sizing:border-box; border-radius:8px; border:1px solid #e6e6e6; background:var(--tab-bg); color:#111; }
+  button { padding:10px 14px; margin-top:8px; cursor:pointer; border-radius:8px; border:none; background:var(--tab-bg); color:#111; font-weight:600; box-shadow:0 2px 6px rgba(0,0,0,0.12); }
+  .small { font-size:13px; color:#555; }
+
+  ul { padding-left:18px; }
+  .player-list { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .player { padding:6px 8px; background:#eef2ff; border-radius:6px; font-size:14px; color:#1a1a1a; }
+  .dead { text-decoration:line-through; opacity:0.6; background:#ffeef0; color:#1a1a1a; }
+  .center { text-align:center; }
+  .highlight { background:#fff9db; padding:8px; border-radius:6px; border:1px dashed #ffd166; color:#1a1a1a; }
+  .roles-box { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .role { padding:6px 8px; background:#f0f4f8; border-radius:6px; color:#1a1a1a; }
+
+  /* Title screen */
+  #titleCard { display:flex; flex-direction:column; justify-content:space-between; align-items:center; height:70vh; padding:24px; box-sizing:border-box; border-radius:16px; background:transparent; box-shadow:none; border:none; color:#fff; }
+  #titleTop { text-align:center; margin-top:8px; width:100%; }
+  /* 大きく目立つタイトルサイズ */
+  #titleTop h1 { margin:0; font-size:64px; line-height:1; color:#fff; letter-spacing:2px; font-weight:900; text-align:center; }
+  #titleCenter { display:flex; align-items:center; justify-content:center; flex:1; width:100%; }
+  /* イラストなしなので中央は空白スペースに */
+  #titleCenter .empty-space { width:100%; height:220px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.08); font-size:18px; }
+  #titleBottom { width:100%; display:flex; justify-content:center; margin-bottom:6px; }
+  .start-tab { width:160px; height:56px; display:flex; align-items:center; justify-content:center; border-radius:12px; background:var(--tab-bg); color:#111; font-weight:800; font-size:18px; box-shadow:0 8px 30px rgba(0,0,0,0.35); cursor:pointer; }
+
+  /* Layout adjustments for setup & game area */
+  #setupCard { margin-top:18px; }
+  .inline { display:flex; gap:8px; }
+  .name-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+
+  /* responsive: タイトルを小さい画面でも見やすく */
+  @media (max-width:720px){
+    #titleTop h1 { font-size:44px; }
+    #titleCenter .empty-space { height:140px; }
+    .start-tab { width:140px; height:52px; font-size:16px; }
+  }
+  @media (max-width:420px){
+    #titleTop h1 { font-size:34px; }
+    .start-tab { width:120px; height:48px; font-size:15px; }
+  }
+
+  /* log styling inside game card should have dark text on white */
+  #logBox { max-height:180px; overflow:auto; background:#fafafa; padding:8px; border-radius:8px; border:1px solid #eee; color:#333; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- Title Screen -->
+    <div id="titleCard">
+      <div id="titleTop">
+        <h1 id="titleText">シンプル人狼</h1>
+      </div>
+
+      <div id="titleCenter">
+        <!-- イラストを表示しない仕様に合わせて空間を確保 -->
+        <div class="empty-space" aria-hidden="true">　</div>
+      </div>
+
+      <div id="titleBottom">
+        <div class="start-tab" id="startBtn">START</div>
+      </div>
+    </div>
+
+    <!-- Setup Card -->
+    <div id="setupCard" class="card" style="display:none;">
+      <strong>準備</strong>
+      <p class="small">プレイヤー数を指定すると、その人数分の名前入力欄が自動で表示されます。端末を回してプレイする「パス＆プレイ」方式です。</p>
+
+      <label>プレイヤー数（4〜12）</label>
+      <input type="number" id="playerCount" min="4" max="12" value="6">
+
+      <div class="inline">
+        <div style="flex:1">
+          <label>希望: 人狼数を手動で指定する（空白で自動）</label>
+          <input type="number" id="werewolfManual" min="1" placeholder="例: 2">
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>プレイヤー名（各プレイヤーの入力欄）</label>
+        <div id="nameInputs" class="name-list card" style="padding:12px;"></div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="setupBtn">プレイヤーを作成して役配布</button>
+        <button id="resetBtn">最初からやり直す</button>
+      </div>
+      <div id="playersPreview" class="player-list" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- Game Card -->
+    <div id="gameCard" class="card" style="display:none;">
+      <div id="statusBox" class="small"></div>
+
+      <div id="phaseBox" class="card" style="margin-top:10px;"></div>
+
+      <div id="actions"></div>
+
+      <div style="margin-top:12px;">
+        <button id="nextPhaseBtn" style="display:none;">次へ</button>
+      </div>
+
+      <div style="margin-top:12px;" id="logBox" class="small"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ゲーム状態
+  let players = []; // {id, name, role, alive}
+  let phase = 'setup'; // setup, roleReveal, night, day, end
+  let nightCount = 0;
+  let pendingVictim = null; // chosen by werewolves at night
+  let seerResult = null; // {targetId, role}
+  let votes = {}; // voting tally during day {voterId: targetId}
+  const roleNames = { werewolf: '人狼', seer: '占い師', villager: '村人' };
+
+  // Helpers
+  const $ = id => document.getElementById(id);
+  const log = (t) => {
+    const b = $('logBox');
+    if(!b) return;
+    b.innerHTML = (b.innerHTML ? b.innerHTML + '<br>' : '') + t;
+    b.scrollTop = b.scrollHeight;
+  };
+
+  // Title -> Setup
+  $('startBtn').addEventListener('click', () => {
+    $('titleCard').style.display = 'none';
+    $('setupCard').style.display = 'block';
+    phase = 'setup';
+    initNameInputs();
+  });
+
+  // Setup UI: when playerCount changes, regenerate name input fields
+  function initNameInputs() {
+    const count = parseInt($('playerCount').value) || 6;
+    generateNameInputs(count);
+    renderPlayersPreviewEmpty(count);
+  }
+
+  $('playerCount').addEventListener('change', () => {
+    let v = parseInt($('playerCount').value) || 6;
+    if (v < 4) v = 4;
+    if (v > 12) v = 12;
+    $('playerCount').value = v;
+    generateNameInputs(v);
+    renderPlayersPreviewEmpty(v);
+  });
+
+  function generateNameInputs(count) {
+    const container = $('nameInputs');
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.gap = '8px';
+      wrapper.style.alignItems = 'center';
+
+      const label = document.createElement('div');
+      label.style.width = '72px';
+      label.style.fontWeight = '700';
+      label.style.color = '#333';
+      label.textContent = `名前 ${i+1}`;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'name-input';
+      input.placeholder = `プレイヤー${i+1}`;
+      input.dataset.index = i;
+      input.addEventListener('input', () => {
+        // update preview as user types
+        renderPlayersPreviewFromInputs();
+      });
+
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+      container.appendChild(wrapper);
+    }
+  }
+
+  function renderPlayersPreviewEmpty(count) {
+    const container = $('playersPreview');
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('div');
+      el.className = 'player';
+      el.textContent = `プレイヤー${i+1}`;
+      container.appendChild(el);
+    }
+  }
+
+  function renderPlayersPreviewFromInputs() {
+    const container = $('playersPreview');
+    container.innerHTML = '';
+    const inputs = document.querySelectorAll('#nameInputs input.name-input');
+    inputs.forEach((inp, i) => {
+      const name = inp.value.trim() || `プレイヤー${i+1}`;
+      const el = document.createElement('div');
+      el.className = 'player';
+      el.textContent = name;
+      container.appendChild(el);
+    });
+  }
+
+  // Setup actions
+  $('setupBtn').addEventListener('click', () => {
+    const count = parseInt($('playerCount').value) || 0;
+    if (count < 4 || count > 12) {
+      alert('プレイヤー数は4〜12の範囲で指定してください。');
+      return;
+    }
+    const nameInputs = Array.from(document.querySelectorAll('#nameInputs input.name-input'));
+    const names = nameInputs.map((inp,i) => inp.value.trim() || `プレイヤー${i+1}`);
+    const manualWere = parseInt($('werewolfManual').value);
+    createPlayers(count, names, manualWere);
+    assignRoles(manualWere);
+    startRoleReveal();
+  });
+
+  $('resetBtn').addEventListener('click', resetAll);
+
+  function createPlayers(count, names, manualWere) {
+    players = [];
+    for (let i = 0; i < count; i++) {
+      players.push({
+        id: i,
+        name: names[i] || `プレイヤー${i+1}`,
+        role: null,
+        alive: true
+      });
+    }
+    renderPlayersPreview();
+  }
+
+  function renderPlayersPreview() {
+    const container = $('playersPreview');
+    container.innerHTML = '';
+    players.forEach(p => {
+      const el = document.createElement('div');
+      el.className = 'player';
+      el.textContent = p.name;
+      container.appendChild(el);
+    });
+  }
+
+  function assignRoles(manualWere) {
+    const n = players.length;
+    let wereCount;
+    if (manualWere && manualWere >=1 && manualWere < n) wereCount = manualWere;
+    else {
+      if (n <= 5) wereCount = 1;
+      else if (n <= 8) wereCount = 2;
+      else wereCount = 3;
+    }
+    const seerCount = 1;
+    const villagerCount = n - wereCount - seerCount;
+    const roleArray = [];
+    for (let i=0;i<wereCount;i++) roleArray.push('werewolf');
+    for (let i=0;i<seerCount;i++) roleArray.push('seer');
+    for (let i=0;i<villagerCount;i++) roleArray.push('villager');
+
+    shuffle(roleArray);
+    for (let i=0;i<players.length;i++){
+      players[i].role = roleArray[i];
+      players[i].alive = true;
+    }
+
+    log(`役職を配布しました。（人狼 ${wereCount} 名、占い師 ${seerCount} 名、村人 ${villagerCount} 名）`);
+  }
+
+  function shuffle(a) {
+    for (let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+  }
+
+  // Role reveal (pass & play)
+  function startRoleReveal() {
+    phase = 'roleReveal';
+    $('setupCard').style.display = 'none';
+    $('gameCard').style.display = 'block';
+    $('logBox').innerHTML = '';
+    $('statusBox').textContent = '役職確認: 端末を順番に渡して役職を確認してください。';
+    $('phaseBox').innerHTML = '';
+    $('actions').innerHTML = '';
+    $('nextPhaseBtn').style.display = 'none';
+    let idx = 0;
+    showRoleToPlayer(idx);
+
+    function showRoleToPlayer(i) {
+      const p = players[i];
+      $('phaseBox').innerHTML = `
+        <strong>プレイヤー ${i+1} の役職確認</strong>
+        <p class="small">画面を渡して、${p.name}さんだけが自分の役職を確認してください。</p>
+        <div class="highlight">
+          <div style="font-size:18px; margin-bottom:6px;">${p.name}</div>
+          <div style="font-weight:600; font-size:16px;">${roleNames[p.role] || p.role}</div>
+          <div class="small" style="margin-top:6px;">
+            ${p.role === 'werewolf' ? 'あなたは人狼です。夜に誰かを襲撃できます（他の人狼と協力して決めてください）。' : ''}
+            ${p.role === 'seer' ? 'あなたは占い師です。夜に1人の正体を知ることができます。' : ''}
+            ${p.role === 'villager' ? 'あなたは村人です。昼に議論して投票を行います。' : ''}
+          </div>
+        </div>
+      `;
+
+      $('actions').innerHTML = `
+        <div style="margin-top:8px;">
+          <button id="okBtn">確認した（次の人へ）</button>
+        </div>
+      `;
+      $('okBtn').addEventListener('click', () => {
+        i++;
+        if (i < players.length) {
+          showRoleToPlayer(i);
+        } else {
+          startNight();
+        }
+      });
+    }
+  }
+
+  // Night phase
+  function startNight() {
+    phase = 'night';
+    nightCount = 1;
+    pendingVictim = null;
+    seerResult = null;
+    $('statusBox').textContent = `夜（夜${nightCount}） — 端末を人狼・占い師へ順番に回してください`;
+    renderNightStep();
+    log('夜になりました。');
+  }
+
+  function renderNightStep() {
+    $('phaseBox').innerHTML = `<strong>夜の行動</strong><p class="small">人狼→占い師の順で端末を回してください。</p>`;
+    $('actions').innerHTML = '';
+    $('nextPhaseBtn').style.display = 'none';
+
+    const werewolves = players.filter(p => p.role === 'werewolf' && p.alive);
+    if (werewolves.length > 0) {
+      $('actions').innerHTML = `<div><strong>人狼の番（${werewolves.length} 名）</strong>
+        <p class="small">人狼だけ端末を見て、襲撃する相手を選んでください。</p>
+        <div id="werewolfAction"></div>
+      </div>`;
+      renderWerewolfAction();
+    } else {
+      renderSeerAction();
+    }
+  }
+
+  function renderWerewolfAction() {
+    const aliveTargets = players.filter(p => p.alive && p.role !== 'werewolf');
+    const container = $('werewolfAction');
+    if (aliveTargets.length === 0) {
+      container.innerHTML = '<div class="small">襲撃可能なプレイヤーがいません。</div>';
+      renderSeerAction();
+      return;
+    }
+    container.innerHTML = `
+      <label>襲撃する相手を選択</label>
+      <select id="wereTarget">
+        ${aliveTargets.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+      </select>
+      <div style="margin-top:8px;">
+        <button id="wereConfirm">決定（確認）</button>
+      </div>
+    `;
+    $('wereConfirm').addEventListener('click', () => {
+      const tid = parseInt($('wereTarget').value);
+      pendingVictim = tid;
+      log(`人狼は${players.find(p=>p.id===tid).name}を襲撃することに決めました（非公開）`);
+      renderSeerAction();
+    });
+  }
+
+  function renderSeerAction() {
+    const seer = players.find(p => p.role === 'seer' && p.alive);
+    const actions = $('actions');
+    const seerHtml = seer ? `
+      <div style="margin-top:12px;">
+        <strong>占い師の番</strong>
+        <p class="small">占い師だけ端末を見て、1人を選んで役職を確認してください。</p>
+        <label>確認する相手を選択</label>
+        <select id="seerTarget">
+          ${players.filter(p => p.alive && p.id !== seer.id).map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+        </select>
+        <div style="margin-top:8px;"><button id="seerConfirm">占う</button></div>
+      </div>
+    ` : `<div class="small" style="margin-top:12px;">生存している占い師はいません（占いスキップ）</div>`;
+
+    actions.innerHTML += seerHtml;
+    if (seer) {
+      $('seerConfirm').addEventListener('click', () => {
+        const tid = parseInt($('seerTarget').value);
+        seerResult = { targetId: tid, role: players.find(p=>p.id===tid).role };
+        log(`${seer.name}（占い師）は${players.find(p=>p.id===tid).name} を占いました。結果は占い師へ表示済み（非公開）。`);
+        actions.innerHTML = `
+          <div class="highlight">
+            <div>占いの結果: ${players.find(p=>p.id===tid).name} の役職は <strong>${roleNames[seerResult.role]}</strong> です。</div>
+          </div>
+          <div style="margin-top:8px;"><button id="seerDone">確認した</button></div>
+        `;
+        $('seerDone').addEventListener('click', () => {
+          proceedToDay();
+        });
+      });
+    } else {
+      proceedToDay();
+    }
+  }
+
+  function proceedToDay() {
+    if (pendingVictim != null) {
+      players.find(p => p.id === pendingVictim).alive = false;
+      log(`夜の結果: ${players.find(p => p.id === pendingVictim).name} が噛まれて死亡しました。`);
+    } else {
+      log('夜の結果: 誰も襲撃されませんでした。');
+    }
+    phase = 'day';
+    renderDay();
+  }
+
+  // Day phase: 昼の発言（任意）→投票
+  function renderDay() {
+    $('statusBox').textContent = `昼 — プレイヤーで議論し、投票で追放（リンチ）を決定してください。`;
+    $('phaseBox').innerHTML = `<strong>昼の処理</strong>
+      <p class="small">議論の後、投票に移ります。端末を生存者順に回して、投票してください（秘密投票）。</p>
+    `;
+    $('actions').innerHTML = `
+      <div style="margin-top:8px;">
+        <button id="startVoteBtn">投票を開始する</button>
+      </div>
+    `;
+    $('nextPhaseBtn').style.display = 'none';
+    $('startVoteBtn').addEventListener('click', startVoting);
+  }
+
+  function startVoting() {
+    votes = {};
+    const alivePlayers = players.filter(p=>p.alive);
+    let voterIdx = 0;
+    $('actions').innerHTML = '';
+    $('phaseBox').innerHTML = `<strong>投票</strong><p class="small">端末を生存者に順番に渡して、投票してください。</p>`;
+
+    const voteArea = document.createElement('div');
+    voteArea.id = 'voteArea';
+    $('actions').appendChild(voteArea);
+
+    renderVoteFor(voterIdx);
+
+    function renderVoteFor(i) {
+      const voter = alivePlayers[i];
+      voteArea.innerHTML = `
+        <div><strong>${voter.name} さんの投票</strong></div>
+        <div class="small">投票先を選んでください。（白票は「棄権」）</div>
+        <label>投票先</label>
+        <select id="voteSelect">
+          <option value="-1">棄権（白票）</option>
+          ${alivePlayers.filter(p => p.id !== voter.id).map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+        </select>
+        <div style="margin-top:8px;"><button id="voteBtn">投票する</button></div>
+      `;
+      $('voteBtn').addEventListener('click', () => {
+        const val = parseInt($('voteSelect').value);
+        votes[voter.id] = (val >= 0 ? val : null);
+        log(`${voter.name} が投票しました（非公開）`);
+        i++;
+        if (i < alivePlayers.length) renderVoteFor(i);
+        else finalizeVoting();
+      });
+    }
+  }
+
+  function finalizeVoting() {
+    const tally = {};
+    Object.keys(votes).forEach(voterId => {
+      const target = votes[voterId];
+      if (target != null) {
+        tally[target] = (tally[target] || 0) + 1;
+      }
+    });
+    let max = 0;
+    let top = [];
+    for (const tid in tally) {
+      const c = tally[tid];
+      if (c > max) { max = c; top = [parseInt(tid)]; }
+      else if (c === max) top.push(parseInt(tid));
+    }
+    if (top.length === 0) {
+      log('投票結果: 投票がなく、追放者なし（白票のみ）');
+      $('phaseBox').innerHTML += `<div class="small" style="margin-top:8px;">投票の結果、追放者は出ませんでした。</div>`;
+    } else if (top.length >= 2) {
+      log('投票結果: 同票で追放者なし（同票）');
+      $('phaseBox').innerHTML += `<div class="small" style="margin-top:8px;">最多得票が同票のため追放者は出ませんでした。</div>`;
+    } else {
+      const victimId = top[0];
+      players.find(p => p.id === victimId).alive = false;
+      log(`投票結果: ${players.find(p => p.id === victimId).name} が追放されました。`);
+      $('phaseBox').innerHTML += `<div class="small" style="margin-top:8px;">${players.find(p=>p.id===victimId).name} は追放されました（役職: <strong>${roleNames[players.find(p=>p.id===victimId).role]}</strong>）。</div>`;
+    }
+
+    checkWinCondition();
+    if (phase !== 'end') {
+      nightCount++;
+      pendingVictim = null;
+      seerResult = null;
+      $('actions').innerHTML = `<div style="margin-top:8px;"><button id="nextNightBtn">夜へ進む</button></div>`;
+      $('nextPhaseBtn').style.display = 'none';
+      $('nextNightBtn').addEventListener('click', () => {
+        startNight();
+      });
+    } else {
+      renderEnd();
+    }
+  }
+
+  function checkWinCondition() {
+    const alive = players.filter(p=>p.alive);
+    const wolvesAlive = alive.filter(p => p.role === 'werewolf').length;
+    const villagersAlive = alive.filter(p => p.role !== 'werewolf').length;
+    if (wolvesAlive === 0) {
+      phase = 'end';
+      log('勝利判定: 村人チームの勝利（全ての人狼がいなくなった）');
+      $('phaseBox').innerHTML += `<div class="highlight" style="margin-top:8px;">村人チームの勝利！</div>`;
+    } else if (wolvesAlive >= villagersAlive) {
+      phase = 'end';
+      log('勝利判定: 人狼チームの勝利（人狼の数が村人以上）');
+      $('phaseBox').innerHTML += `<div class="highlight" style="margin-top:8px;">人狼チームの勝利！</div>`;
+    } else {
+      // continue
+    }
+  }
+
+  function renderEnd() {
+    $('statusBox').textContent = 'ゲーム終了';
+    $('actions').innerHTML = `<div style="margin-top:8px;"><button id="restartBtn">最初からプレイする</button></div>`;
+    $('restartBtn').addEventListener('click', resetAll);
+    const listHtml = players.map(p => {
+      return `<div class="${p.alive ? '' : 'dead'}">${p.name} — ${roleNames[p.role]} ${p.alive ? '(生存)' : '(死亡)'}</div>`;
+    }).join('');
+    $('phaseBox').innerHTML += `<div style="margin-top:8px;"><strong>最終結果（全員の役職）</strong><div style="margin-top:6px;">${listHtml}</div></div>`;
+  }
+
+  function resetAll() {
+    players = [];
+    phase = 'setup';
+    nightCount = 0;
+    pendingVictim = null;
+    seerResult = null;
+    votes = {};
+    $('setupCard').style.display = 'none';
+    $('gameCard').style.display = 'none';
+    $('titleCard').style.display = 'block';
+    $('playersPreview').innerHTML = '';
+    $('werewolfManual').value = '';
+    $('logBox').innerHTML = '';
+    $('statusBox').textContent = '';
+    $('phaseBox').innerHTML = '';
+    $('actions').innerHTML = '';
+    $('nextPhaseBtn').style.display = 'none';
+    initNameInputs();
+  }
+
+  // Initialize on load
+  (function init(){
+    // generate default inputs for quick dev/test
+    generateNameInputs(parseInt($('playerCount').value) || 6);
+    renderPlayersPreviewEmpty(parseInt($('playerCount').value) || 6);
+  })();
+
+})();
+</script>
+</body>
+</html>
